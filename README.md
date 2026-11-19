@@ -66,6 +66,7 @@ sudo python3 run_matrix.py
 - Workload: `llama-batched-bench` from llama.cpp, 128-token prompt, 512 generated tokens per request, all layers on the GPU.
 - Power sources: `powermetrics` (CPU, GPU and Neural Engine power) and `macmon` (package, DRAM and whole-system power, plus memory use).
 - A 30 s idle baseline is measured before each run and subtracted. Energy is integrated over the window in which the GPU is active, which excludes model loading.
+- The script verifies the workload's exit status and checks that the number of generated tokens (TG x B in the llama-batched-bench table) matches `--tokens`; a failed or mismatched run saves nothing. This check was added after the 18 reported runs were collected. Those runs show consistent throughput across repeats (spread under 1%), so they appear to have completed normally.
 
 ## Limitations
 
@@ -75,6 +76,7 @@ sudo python3 run_matrix.py
 - The DRAM figure is `macmon`'s estimate and has not been validated externally.
 - The active window is found from one-second samples, so each J/token figure has up to about 4% timing uncertainty.
 - Memory use peaked at about 7.4 GB of 8 GB and the system swapped up to about 390 MB over the session. Repeats were consistent, but a small effect cannot be ruled out.
+- A later control run with more background memory use (about 2.5 GB of swap) gave 0.357 J/token (package), within about 5% of the 4-bit, 1-request mean (0.340). It is a single run and is not part of the table above.
 
 ## License
 
