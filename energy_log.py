@@ -39,6 +39,7 @@ PM_CMD = ["powermetrics", "-i", "1000", "--samplers", "cpu_power,gpu_power,ane_p
 MM_CMD = ["macmon", "pipe"]
 RE_PART = re.compile(r"^(CPU|GPU|ANE) Power:\s+([\d.]+)\s*mW")
 RE_COMB = re.compile(r"^Combined Power.*:\s+([\d.]+)\s*mW")
+RE_ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|")
 
 pm_samples = []  # (t, cpu_w, gpu_w, ane_w, combined_w)
 mm_samples = []  # (t, sys_w, pkg_w, ram_w, ram_used_gb, swap_mb)
@@ -117,13 +118,36 @@ def main():
 
     print("[2/3] running workload...")
     t0 = time.time()
-    subprocess.run(cmd)
+    out_lines = []
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, bufsize=1)
+    for line in proc.stdout:
+        sys.stdout.write(line)
+        out_lines.append(line)
+    rc = proc.wait()
     t1 = time.time()
     time.sleep(2)
 
     pm.terminate()
     mm.terminate()
     wall = t1 - t0
+
+    # A failed workload must never produce a result row.
+    if rc != 0:
+        sys.exit(f"\nERROR: workload exited with code {rc}. Nothing was saved for this run.")
+
+    # Verify how many tokens were really generated (llama-batched-bench table: PP | TG | B | N_KV).
+    rows = [m for m in (RE_ROW.match(l) for l in out_lines) if m]
+    if rows:
+        m = rows[-1]
+        actual = int(m.group(2)) * int(m.group(3))
+        if args.tokens and actual != args.tokens:
+            sys.exit(f"\nERROR: --tokens={args.tokens} but the workload reports {actual} "
+                     f"generated tokens (TG x B). Nothing was saved for this run.")
+        args.tokens = actual
+    else:
+        print("  NOTE: could not read the token count from the workload output; "
+              "using --tokens as given.")
 
     # raw dump
     with open(f"{args.name}_raw.csv", "w", newline="") as f:
